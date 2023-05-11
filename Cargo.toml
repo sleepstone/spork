@@ -1,0 +1,7 @@
+[package]
+name = "spork"
+description = "Opinionated C/C++ build system"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
