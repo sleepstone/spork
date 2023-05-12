@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs, path::Path};
+use std::fmt::Display;
 
 use git2::Repository;
 use regex::Regex;
@@ -7,6 +7,8 @@ use crate::{
     error::{FatalError, FatalResult},
     project::{BuildFile, ProjectInfo},
     success,
+    util::{mkdir, mkfile},
+    SPORK_FILE_NAME,
 };
 
 #[derive(PartialEq)]
@@ -38,6 +40,8 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
     let clang_format_src = include_str!("../template/.clang-format");
     mkfile(&format!("{path}/.clang-format"), clang_format_src)?;
 
+    mkfile(&format!("{path}/.gitignore"), "bin\n")?;
+
     if project_type == ProjectType::Library {
         mkdir(&format!("{path}/include"))?;
         mkdir(&format!("{path}/include/{name}"))?;
@@ -65,7 +69,7 @@ fn create_spork_file(name: &str, path: &str) -> FatalResult<()> {
     };
 
     mkfile(
-        &format!("{path}/Spork.toml"),
+        &format!("{path}/{SPORK_FILE_NAME}"),
         &toml::to_string_pretty(&info_template).unwrap(),
     )?;
 
@@ -76,42 +80,6 @@ fn check_project_name(name: &str) -> FatalResult<()> {
     let verifier = Regex::new(r"[^a-z_]").unwrap();
     if verifier.is_match(name) {
         Err(FatalError::InvalidProjectName)
-    } else {
-        Ok(())
-    }
-}
-
-fn mkfile(path: &str, contents: &str) -> FatalResult<()> {
-    if let Err(err) = fs::write(path, contents) {
-        Err(FatalError::CannotCreateFile {
-            path: path.to_string(),
-            err,
-        })
-    } else {
-        Ok(())
-    }
-}
-
-fn mkdir(path: &str) -> FatalResult<()> {
-    match Path::new(path).try_exists() {
-        Ok(exists) => {
-            if exists {
-                return Ok(());
-            }
-        }
-        Err(err) => {
-            return Err(FatalError::CannotCreateDir {
-                path: path.to_string(),
-                err,
-            });
-        }
-    }
-
-    if let Err(err) = fs::create_dir(path) {
-        Err(FatalError::CannotCreateDir {
-            path: path.to_string(),
-            err,
-        })
     } else {
         Ok(())
     }

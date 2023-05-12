@@ -1,17 +1,29 @@
+mod build;
 mod error;
 mod init;
 mod project;
+mod util;
 
-use std::{env::current_dir, fs};
+use std::{env::current_dir, fs, process::exit};
 
 use clap::{Parser, Subcommand};
 use error::{FatalError, FatalResult};
-use init::{new_project, ProjectType};
+use init::ProjectType;
+use project::parse_spork_file;
+
+const SPORK_FILE_NAME: &str = "Spork.toml";
 
 #[macro_export]
 macro_rules! success {
     ($($arg:tt)+) => {{
         println!("{} {}", yansi::Paint::green("[*]").bold(), format!($($arg)+))
+    }};
+}
+
+#[macro_export]
+macro_rules! progress {
+    ($($arg:tt)+) => {{
+        println!("{} {}", yansi::Paint::blue("[+]").bold(), format!($($arg)+))
     }};
 }
 
@@ -55,11 +67,18 @@ enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Build the current project
+    Build,
+
+    /// Removes the 'bin' directory
+    Clean,
 }
 
 fn main() {
     if let Err(err) = init() {
         err.print();
+        exit(1);
     }
 }
 
@@ -67,67 +86,92 @@ fn init() -> FatalResult<()> {
     let cli = Cli::parse();
 
     match cli.cmd {
-        Commands::New { name, lib, force } => {
-            let project_type = if lib {
-                ProjectType::Library
-            } else {
-                ProjectType::Executable
-            };
+        Commands::New { name, lib, force } => new_project(&name, lib, force),
+        Commands::Init { lib, force } => init_project(lib, force),
 
-            if let Ok(dir) = fs::read_dir(&name) {
-                if dir.count() != 0 && !force {
-                    warning!("directory is not empty: use --force to override");
-                    return Ok(());
-                }
-            }
+        Commands::Build => build_project(),
+        Commands::Clean => clean_project(),
+    }
+}
 
-            new_project(&name, &name, project_type)?
-        }
-
-        Commands::Init { lib, force } => {
-            let project_type = if lib {
-                ProjectType::Library
-            } else {
-                ProjectType::Executable
-            };
-
-            let current_dir = match current_dir() {
-                Ok(res) => res,
-                Err(err) => return Err(FatalError::CannotGetCurrentDir { err }),
-            };
-
-            let project_name = match current_dir.into_iter().last() {
-                Some(res) => match res.to_str() {
-                    Some(res) => res,
-                    None => return Err(FatalError::CurrentDirInvalidUTF8),
-                },
-                None => return Err(FatalError::CurrentDirInvalid),
-            };
-
-            let project_path = match current_dir.to_str() {
-                Some(res) => res,
-                None => return Err(FatalError::CurrentDirInvalidUTF8),
-            };
-
-            // Check if it is empty
-            match fs::read_dir(project_path) {
-                Ok(res) => {
-                    if res.count() != 0 && !force {
-                        warning!("directory is not empty: use --force to override");
-                        return Ok(());
-                    }
-                }
-                Err(err) => {
-                    return Err(FatalError::CannotReadDir {
-                        path: project_path.to_string(),
-                        err,
-                    })
-                }
-            }
-
-            new_project(project_name, project_path, project_type)?;
-        }
+fn new_project(name: &str, lib: bool, force: bool) -> FatalResult<()> {
+    let project_type = if lib {
+        ProjectType::Library
+    } else {
+        ProjectType::Executable
     };
+
+    if let Ok(dir) = fs::read_dir(name) {
+        if dir.count() != 0 && !force {
+            warning!("directory is not empty: use --force to override");
+            return Ok(());
+        }
+    }
+
+    init::new_project(name, name, project_type)?;
+
+    Ok(())
+}
+
+fn init_project(lib: bool, force: bool) -> FatalResult<()> {
+    let project_type = if lib {
+        ProjectType::Library
+    } else {
+        ProjectType::Executable
+    };
+
+    let current_dir = match current_dir() {
+        Ok(res) => res,
+        Err(err) => return Err(FatalError::CannotGetCurrentDir { err }),
+    };
+
+    let project_name = match current_dir.iter().last() {
+        Some(res) => match res.to_str() {
+            Some(res) => res,
+            None => return Err(FatalError::CurrentDirInvalidUTF8),
+        },
+        None => return Err(FatalError::CurrentDirInvalid),
+    };
+
+    let project_path = match current_dir.to_str() {
+        Some(res) => res,
+        None => return Err(FatalError::CurrentDirInvalidUTF8),
+    };
+
+    // Check if it is empty
+    match fs::read_dir(project_path) {
+        Ok(res) => {
+            if res.count() != 0 && !force {
+                warning!("directory is not empty: use --force to override");
+                return Ok(());
+            }
+        }
+        Err(err) => {
+            return Err(FatalError::CannotReadDir {
+                path: project_path.to_string(),
+                err,
+            })
+        }
+    }
+
+    init::new_project(project_name, project_path, project_type)?;
+
+    Ok(())
+}
+
+fn build_project() -> FatalResult<()> {
+    build::build("bin")
+}
+
+fn clean_project() -> FatalResult<()> {
+    parse_spork_file(SPORK_FILE_NAME)?;
+    if let Err(err) = fs::remove_dir_all("bin") {
+        return Err(FatalError::CannotRemoveDir {
+            path: String::from("bin"),
+            err,
+        });
+    }
+    success!("cleaned");
 
     Ok(())
 }

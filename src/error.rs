@@ -1,6 +1,8 @@
-use std::{fmt::Display, io};
+use std::{fmt::Display, io, path::Path};
 
 use yansi::Paint;
+
+use crate::SPORK_FILE_NAME;
 
 pub type FatalResult<T> = Result<T, FatalError>;
 
@@ -9,11 +11,15 @@ pub enum FatalError {
     CannotCreateFile { path: String, err: io::Error },
     CannotCreateDir { path: String, err: io::Error },
     CannotGetCurrentDir { err: io::Error },
+    CannotReadFileInDir { path: String, err: io::Error },
     CannotReadDir { path: String, err: io::Error },
+    CannotRemoveDir { path: String, err: io::Error },
     CurrentDirInvalid,
     CurrentDirInvalidUTF8,
+    FileInvalidUTF8 { path: Box<Path> },
     FailedRunGitInit { err: git2::Error },
     BuildFileParseError { err: toml::de::Error },
+    NoSporkProject,
 }
 
 impl FatalError {
@@ -36,20 +42,37 @@ impl Display for FatalError {
                 write!(f, "cannot create directory at '{path}': {err}")
             }
             Self::CannotGetCurrentDir { err } => write!(f, "couldn't get current directory: {err}"),
+            Self::CannotReadFileInDir { path, err } => {
+                write!(f, "couldn't read file in directory '{path}': {err}")
+            }
             Self::CannotReadDir { path, err } => {
                 write!(f, "couldn't read directory '{path}': {err}")
+            }
+            Self::CannotRemoveDir { path, err } => {
+                write!(f, "couldn't remove directory '{path}': {err}")
             }
             Self::CurrentDirInvalid => write!(f, "current directory is invalid"),
             Self::CurrentDirInvalidUTF8 => {
                 write!(f, "current directory contains invalid UTF-8 encoded text")
             }
+            Self::FileInvalidUTF8 { path } => {
+                write!(
+                    f,
+                    "file '{}' contains invalid UTF-8 encoded text",
+                    path.display()
+                )
+            }
             Self::FailedRunGitInit { err } => {
                 write!(f, "failed to initialize a git repository: {err}")
             }
             Self::BuildFileParseError { err } => {
-                writeln!(f, "failed to parse Spork.toml file:")?;
+                writeln!(f, "failed to parse '{SPORK_FILE_NAME}':")?;
                 write!(f, "{err}")
             }
+            Self::NoSporkProject => write!(
+                f,
+                "couldn't find a spork project here - use 'spork new' or 'spork init' to create one"
+            ),
         }
     }
 }
