@@ -13,6 +13,7 @@ pub enum FatalError {
     CurrentDirInvalid,
     CurrentDirInvalidUTF8,
     FailedRunGitInit { err: git2::Error },
+    BuildFileParseError { err: toml::de::Error },
 }
 
 impl FatalError {
@@ -44,6 +45,10 @@ impl Display for FatalError {
             }
             Self::FailedRunGitInit { err } => {
                 write!(f, "failed to initialize a git repository: {err}")
+            }
+            Self::BuildFileParseError { err } => {
+                writeln!(f, "failed to parse Spork.toml file:")?;
+                write!(f, "{err}")
             }
         }
     }

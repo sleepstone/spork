@@ -5,6 +5,7 @@ use regex::Regex;
 
 use crate::{
     error::{FatalError, FatalResult},
+    project::{BuildFile, ProjectInfo},
     success,
 };
 
@@ -45,11 +46,28 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
         mkfile(&format!("{path}/include/{name}/entry.h"), template_header)?;
     }
 
+    create_spork_file(name, path)?;
+
     if let Err(err) = Repository::init(path) {
         return Err(FatalError::FailedRunGitInit { err });
     }
 
     success!("created {project_type} project '{name}'");
+
+    Ok(())
+}
+
+fn create_spork_file(name: &str, path: &str) -> FatalResult<()> {
+    let info_template = BuildFile {
+        project: ProjectInfo {
+            name: name.to_string(),
+        },
+    };
+
+    mkfile(
+        &format!("{path}/Spork.toml"),
+        &toml::to_string_pretty(&info_template).unwrap(),
+    )?;
 
     Ok(())
 }
