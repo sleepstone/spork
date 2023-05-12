@@ -5,3 +5,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+git2 = "0.17.1"
+regex = "1.8.1"
+yansi = "0.5.1"
+
+[dependencies.clap]
+version = "4.2.7"
+features = ["derive"]
