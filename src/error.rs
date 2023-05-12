@@ -8,6 +8,9 @@ pub enum FatalError {
     InvalidProjectName,
     CannotCreateFile { path: String, err: io::Error },
     CannotCreateDir { path: String, err: io::Error },
+    CannotGetCurrentDir { err: io::Error },
+    CurrentDirInvalid,
+    CurrentDirInvalidUTF8,
     FailedRunGitInit { err: git2::Error },
 }
 
@@ -29,6 +32,11 @@ impl Display for FatalError {
             }
             Self::CannotCreateDir { path, err } => {
                 write!(f, "cannot create directory at '{path}': {err}")
+            }
+            Self::CannotGetCurrentDir { err } => write!(f, "couldn't get current directory: {err}"),
+            Self::CurrentDirInvalid => write!(f, "current directory is invalid"),
+            Self::CurrentDirInvalidUTF8 => {
+                write!(f, "current directory contains invalid UTF-8 encoded text")
             }
             Self::FailedRunGitInit { err } => {
                 write!(f, "failed to initialize a git repository: {err}")
