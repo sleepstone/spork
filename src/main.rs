@@ -1,11 +1,12 @@
 mod error;
+mod init;
 mod project;
 
 use std::{env::current_dir, fs};
 
 use clap::{Parser, Subcommand};
 use error::{FatalError, FatalResult};
-use project::{new_project, ProjectType};
+use init::{new_project, ProjectType};
 
 #[macro_export]
 macro_rules! success {
