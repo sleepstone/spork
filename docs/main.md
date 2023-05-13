@@ -30,7 +30,7 @@ $ spork run --release
 Hello, world!
 ```
 
-Note that Spork will automatically find all the C files in `src` and compiles them.
+Note that Spork will automatically find all the C files in `src` and compile them.
 
 ## Spork.toml
 99% of all your project/build configuration is handled in `Spork.toml`. The initial file starts out very minimal:
