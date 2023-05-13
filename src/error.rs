@@ -21,7 +21,9 @@ pub enum FatalError {
     BuildFileParseError { err: toml::de::Error },
     CompilationFailed,
     LinkFailed,
+    CannotRunLib,
     NoSporkProject,
+    NoSourceFiles,
 }
 
 impl Display for FatalError {
@@ -71,10 +73,15 @@ impl Display for FatalError {
             }
             Self::CompilationFailed => write!(f, "compilation failed"),
             Self::LinkFailed => write!(f, "linking failed"),
+            Self::CannotRunLib => write!(
+                f,
+                "only executable projects can be run (use 'spork build' instead)"
+            ),
             Self::NoSporkProject => write!(
                 f,
                 "couldn't find a spork project here - use 'spork new' or 'spork init' to create one"
             ),
+            Self::NoSourceFiles => write!(f, "project has no source files"),
         }
     }
 }

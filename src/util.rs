@@ -41,6 +41,17 @@ pub fn mkdir(path: &str) -> FatalResult<()> {
     }
 }
 
+pub fn mkdir_all(path: &str) -> FatalResult<()> {
+    if let Err(err) = fs::create_dir_all(path) {
+        Err(FatalError::CannotCreateDir {
+            path: path.to_string(),
+            err,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub fn walkdir(path: &str) -> FatalResult<Vec<String>> {
     let mut output = Vec::new();
 

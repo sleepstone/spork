@@ -8,8 +8,7 @@ use std::{env::current_dir, fs, process::exit};
 
 use clap::{Parser, Subcommand};
 use error::{FatalError, FatalResult};
-use init::ProjectType;
-use project::parse_spork_file;
+use project::{parse_spork_file, ProjectType};
 
 const SPORK_FILE_NAME: &str = "Spork.toml";
 
@@ -76,10 +75,18 @@ enum Commands {
     },
 
     /// Build the current project
-    Build,
+    Build {
+        /// Build in release mode instead of debug
+        #[arg(short, long)]
+        release: bool,
+    },
 
     /// Build and run the current project
-    Run,
+    Run {
+        /// Build in release mode instead of debug
+        #[arg(short, long)]
+        release: bool,
+    },
 
     /// Removes the 'bin' directory
     Clean,
@@ -99,17 +106,17 @@ fn init() -> FatalResult<()> {
         Commands::New { name, lib, force } => new_project(&name, lib, force),
         Commands::Init { lib, force } => init_project(lib, force),
 
-        Commands::Build => build_project(),
-        Commands::Run => run_project(),
+        Commands::Build { release } => build_project(release),
+        Commands::Run { release } => run_project(release),
         Commands::Clean => clean_project(),
     }
 }
 
 fn new_project(name: &str, lib: bool, force: bool) -> FatalResult<()> {
     let project_type = if lib {
-        ProjectType::Library
+        ProjectType::library
     } else {
-        ProjectType::Executable
+        ProjectType::executable
     };
 
     if let Ok(dir) = fs::read_dir(name) {
@@ -126,9 +133,9 @@ fn new_project(name: &str, lib: bool, force: bool) -> FatalResult<()> {
 
 fn init_project(lib: bool, force: bool) -> FatalResult<()> {
     let project_type = if lib {
-        ProjectType::Library
+        ProjectType::library
     } else {
-        ProjectType::Executable
+        ProjectType::executable
     };
 
     let current_dir = match current_dir() {
@@ -170,15 +177,13 @@ fn init_project(lib: bool, force: bool) -> FatalResult<()> {
     Ok(())
 }
 
-fn build_project() -> FatalResult<()> {
-    build::build("bin")?;
-
+fn build_project(release: bool) -> FatalResult<()> {
+    build::build(release)?;
     Ok(())
 }
 
-fn run_project() -> FatalResult<()> {
-    build::build_and_run("bin")?;
-
+fn run_project(release: bool) -> FatalResult<()> {
+    build::build_and_run(release)?;
     Ok(())
 }
 

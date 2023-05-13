@@ -1,30 +1,13 @@
-use std::fmt::Display;
-
 use git2::Repository;
 use regex::Regex;
 
 use crate::{
     error::{FatalError, FatalResult},
-    project::{BuildFile, ProjectInfo},
+    project::{BuildFile, ProjectInfo, ProjectType},
     success,
     util::{mkdir, mkfile},
     SPORK_FILE_NAME,
 };
-
-#[derive(PartialEq)]
-pub enum ProjectType {
-    Executable, // .exe
-    Library,    // .dll, .so
-}
-
-impl Display for ProjectType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Executable => write!(f, "executable"),
-            Self::Library => write!(f, "library"),
-        }
-    }
-}
 
 pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalResult<()> {
     check_project_name(name)?;
@@ -32,7 +15,7 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
     mkdir(path)?;
     mkdir(&format!("{path}/src"))?;
 
-    if project_type == ProjectType::Executable {
+    if project_type == ProjectType::executable {
         let template_src = include_str!("../template/main.c");
         mkfile(&format!("{path}/src/main.c"), template_src)?;
     }
@@ -42,7 +25,7 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
 
     mkfile(&format!("{path}/.gitignore"), ".vscode\nbin\n")?;
 
-    if project_type == ProjectType::Library {
+    if project_type == ProjectType::library {
         mkdir(&format!("{path}/include"))?;
         mkdir(&format!("{path}/include/{name}"))?;
 
@@ -50,7 +33,7 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
         mkfile(&format!("{path}/include/{name}/entry.h"), template_header)?;
     }
 
-    create_spork_file(name, path)?;
+    create_spork_file(name, path, project_type)?;
 
     if let Err(err) = Repository::init(path) {
         return Err(FatalError::FailedRunGitInit { err });
@@ -61,10 +44,11 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
     Ok(())
 }
 
-fn create_spork_file(name: &str, path: &str) -> FatalResult<()> {
+fn create_spork_file(name: &str, path: &str, project_type: ProjectType) -> FatalResult<()> {
     let info_template = BuildFile {
         project: ProjectInfo {
             name: name.to_string(),
+            kind: project_type,
         },
     };
 
