@@ -7,40 +7,108 @@ use crate::{
     progress,
     project::{parse_spork_file, ProjectType},
     success,
+    targets::{OperatingSystem, Target},
     util::{mkdir_all, walkdir},
     warning, SPORK_FILE_NAME,
 };
 
 pub struct BuildInfo {
+    pub name: String,
     pub release: bool,
     pub kind: ProjectType,
+    pub target: Target,
+    pub output_path: Option<String>,
 }
 
 impl Display for BuildInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let suffix = format!(", {}", self.target);
+
         if self.release {
-            write!(f, "{}, release", self.kind)?;
+            write!(f, "{}, release{}", self.kind, suffix)?;
         } else {
-            write!(f, "{}, debug", self.kind)?;
+            write!(f, "{}, debug{}", self.kind, suffix)?;
         }
 
         Ok(())
     }
 }
 
-pub fn build(release: bool) -> FatalResult<(String, BuildInfo)> {
+pub fn build(release: bool) -> FatalResult<Vec<BuildInfo>> {
+    let spork_file = parse_spork_file(SPORK_FILE_NAME)?;
+    let mut build_infos = Vec::new();
+
+    if let Some(targets) = spork_file.project.targets {
+        if targets.is_empty() {
+            warning!("no targets specified - nothing will be built");
+        }
+
+        for target in targets {
+            let mut info = BuildInfo {
+                name: spork_file.project.name.clone(),
+                release,
+                kind: spork_file.project.kind,
+                target: Target::new(&target, false)?,
+                output_path: None,
+            };
+
+            build_target(&mut info)?;
+            build_infos.push(info);
+        }
+    } else {
+        let mut info = BuildInfo {
+            name: spork_file.project.name,
+            release,
+            kind: spork_file.project.kind,
+            target: Target::host()?,
+            output_path: None,
+        };
+
+        build_target(&mut info)?;
+        build_infos.push(info);
+    }
+
+    Ok(build_infos)
+}
+
+pub fn build_and_run(release: bool) -> FatalResult<()> {
+    let infos = build(release)?;
+    let mut has_run = false;
+
+    for info in infos {
+        if info.kind == ProjectType::library {
+            return Err(FatalError::CannotRunLib);
+        }
+
+        let host = Target::host()?;
+        if info.target != host {
+            continue;
+        }
+
+        let output_to_run = info.output_path.unwrap();
+        if let Err(err) = Command::new(&output_to_run).status() {
+            return Err(FatalError::FailedRunOutput {
+                path: output_to_run,
+                err,
+            });
+        }
+        has_run = true;
+    }
+
+    if has_run {
+        Ok(())
+    } else {
+        Err(FatalError::NoSupportedTargets)
+    }
+}
+
+fn build_target(info: &mut BuildInfo) -> FatalResult<()> {
+    let start_time = Instant::now();
+
     let obj_name_regex = Regex::new(r"[/\\]").unwrap();
 
-    let start_time = Instant::now();
-    let spork_file = parse_spork_file(SPORK_FILE_NAME)?;
-
-    let info = BuildInfo {
-        release,
-        kind: spork_file.project.kind,
-    };
-
-    let out_dir = out_dir(&info);
-    progress!("building '{}'...", spork_file.project.name);
+    let out_dir = out_dir(info);
+    progress!("building '{}'...", info.name);
 
     mkdir_all(&format!("{out_dir}/obj"))?;
 
@@ -61,7 +129,7 @@ pub fn build(release: bool) -> FatalResult<(String, BuildInfo)> {
         let obj_name = obj_name_regex.replace_all(&file[4..(file.len() - 2)], "-");
 
         let obj_path = format!("{out_dir}/obj/{}.o", obj_name);
-        let build_obj_result = build_obj(&file, &obj_path, &info)?;
+        let build_obj_result = build_obj(&file, &obj_path, info)?;
         if !build_obj_result {
             had_error = true;
         }
@@ -74,12 +142,24 @@ pub fn build(release: bool) -> FatalResult<(String, BuildInfo)> {
     }
 
     let output_path = match info.kind {
-        ProjectType::executable => format!("{out_dir}/{}.exe", spork_file.project.name),
-        ProjectType::library => format!("{out_dir}/{}.dll", spork_file.project.name),
+        ProjectType::executable => {
+            if info.target.os == OperatingSystem::Windows {
+                format!("{out_dir}/{}.exe", info.name)
+            } else {
+                format!("{out_dir}/{}", info.name)
+            }
+        }
+        ProjectType::library => {
+            if info.target.os == OperatingSystem::Windows {
+                format!("{out_dir}/{}.dll", info.name)
+            } else {
+                format!("{out_dir}/{}.so", info.name)
+            }
+        }
     };
 
     if !had_error {
-        let build_output_res = build_output(objects, &output_path, &info)?;
+        let build_output_res = build_output(objects, &output_path, info)?;
 
         if build_output_res {
             let end_time = Instant::now();
@@ -91,25 +171,13 @@ pub fn build(release: bool) -> FatalResult<(String, BuildInfo)> {
         return Err(FatalError::CompilationFailed);
     }
 
-    Ok((output_path, info))
-}
+    info.output_path = Some(output_path);
 
-pub fn build_and_run(release: bool) -> FatalResult<()> {
-    let (output, info) = build(release)?;
-
-    if info.kind == ProjectType::library {
-        return Err(FatalError::CannotRunLib);
-    }
-
-    if let Err(err) = Command::new(&output).status() {
-        Err(FatalError::FailedRunOutput { path: output, err })
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bool> {
-    let mut cmd = common_build_cmd();
+    let mut cmd = common_build_cmd(info);
     cmd.args(["-c", src_path, "-o", obj_path, "-Isrc"]);
 
     if info.kind == ProjectType::library {
@@ -135,18 +203,17 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
 }
 
 fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> FatalResult<bool> {
-    let mut cmd = common_build_cmd();
+    let mut cmd = common_build_cmd(info);
     cmd.args(["-o", output_path]);
     cmd.args(objects);
 
     if info.kind == ProjectType::library {
-        let import_lib_path = output_path.replace(".dll", ".lib");
+        cmd.args(["-shared", "-DSPORK_EXPORT"]);
 
-        cmd.args([
-            "-shared",
-            "-DSPORK_EXPORT",
-            &format!("-Wl,--out-implib,{}", import_lib_path),
-        ]);
+        if info.target.os == OperatingSystem::Windows {
+            let import_lib_path = output_path.replace(".dll", ".lib");
+            cmd.arg(&format!("-Wl,--out-implib,{}", import_lib_path));
+        }
     }
 
     if info.release {
@@ -167,17 +234,21 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
     }
 }
 
-fn common_build_cmd() -> Command {
+fn common_build_cmd(info: &BuildInfo) -> Command {
     let mut cmd = Command::new("zig");
     cmd.args(["cc", "-std=c17", "-Wall", "-Wextra", "-Wpedantic"]);
+
+    cmd.args(["-target", &info.target.ziggified()]);
 
     cmd
 }
 
 fn out_dir(info: &BuildInfo) -> String {
+    let prefix = format!("bin/{}", info.target);
+
     if info.release {
-        String::from("bin/release")
+        format!("{prefix}/release")
     } else {
-        String::from("bin/debug")
+        format!("{prefix}/debug")
     }
 }

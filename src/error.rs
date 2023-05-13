@@ -1,9 +1,10 @@
 use std::{fmt::Display, io, path::Path};
 
-use crate::SPORK_FILE_NAME;
+use crate::{targets::Target, SPORK_FILE_NAME};
 
 pub type FatalResult<T> = Result<T, FatalError>;
 
+#[derive(Debug)]
 pub enum FatalError {
     InvalidProjectName,
     CannotCreateFile { path: String, err: io::Error },
@@ -24,6 +25,10 @@ pub enum FatalError {
     CannotRunLib,
     NoSporkProject,
     NoSourceFiles,
+    NoSupportedTargets,
+    BadTarget { target: String },
+    InvalidTargetArch { arch: String },
+    InvalidTargetOS { os: String },
 }
 
 impl Display for FatalError {
@@ -82,6 +87,18 @@ impl Display for FatalError {
                 "couldn't find a spork project here - use 'spork new' or 'spork init' to create one"
             ),
             Self::NoSourceFiles => write!(f, "project has no source files"),
+            Self::NoSupportedTargets => write!(
+                f,
+                "unable to run - no defined targets match host target of '{}'",
+                Target::host().unwrap()
+            ),
+            Self::BadTarget { target } => {
+                write!(f, "target '{target}' must follow format 'arch-os'")
+            }
+            Self::InvalidTargetArch { arch } => {
+                write!(f, "target architecture '{arch}' is invalid")
+            }
+            Self::InvalidTargetOS { os } => write!(f, "target os '{os}' is invalid"),
         }
     }
 }

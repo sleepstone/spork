@@ -2,6 +2,7 @@ mod build;
 mod error;
 mod init;
 mod project;
+mod targets;
 mod util;
 
 use std::{env::current_dir, fs, process::exit};

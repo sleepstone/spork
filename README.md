@@ -10,7 +10,7 @@ Feel free to use it for your projects, but I can't guarantee top notch support t
 
 ## Features
 - Heavily inspired by Cargo
-- Cross compilation by leveraging `zig cc` (wip)
+- Cross compilation by leveraging `zig cc`
 - TOML configuration format
 
 ## Dependencies

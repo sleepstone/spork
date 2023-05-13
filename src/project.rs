@@ -13,6 +13,7 @@ pub struct BuildFile {
 pub struct ProjectInfo {
     pub name: String,
     pub kind: ProjectType,
+    pub targets: Option<Vec<String>>,
 }
 
 pub fn parse_spork_file(path: &str) -> FatalResult<BuildFile> {
