@@ -1,15 +1,18 @@
-use std::{fmt::Display, process::Command, time::Instant};
+use std::{fmt::Display, path::Path, process::Command, time::Instant};
 
+use git2::Repository;
 use regex::Regex;
 
 use crate::{
     error::{FatalError, FatalResult},
     progress,
-    project::{parse_spork_file, ProjectType},
+    project::{parse_spork_file, BuildFile, ProjectFile, ProjectType},
     success,
     targets::{OperatingSystem, Target},
-    util::{mkdir_all, walkdir},
-    warning, SPORK_FILE_NAME,
+    util::{check_member_name, mkdir, mkdir_all, walkdir},
+    warning,
+    workspace::WorkspaceFile,
+    SPORK_FILE_NAME,
 };
 
 pub struct BuildInfo {
@@ -36,8 +39,46 @@ impl Display for BuildInfo {
 
 pub fn build(release: bool, all: bool) -> FatalResult<Vec<BuildInfo>> {
     let spork_file = parse_spork_file(SPORK_FILE_NAME)?;
-    let mut build_infos = Vec::new();
 
+    match spork_file {
+        BuildFile::Project(proj) => build_project(proj, release, all),
+        BuildFile::Workspace(ws) => build_workspace(ws, release, all),
+    }
+}
+
+pub fn build_and_run(release: bool, all: bool) -> FatalResult<()> {
+    let infos = build(release, all)?;
+    let mut has_run = false;
+
+    for info in infos {
+        if info.kind == ProjectType::library {
+            return Err(FatalError::CannotRunLib);
+        }
+
+        let host = Target::host()?;
+        if info.target != host {
+            continue;
+        }
+
+        let output_to_run = info.output_path.unwrap();
+        if let Err(err) = Command::new(&output_to_run).status() {
+            return Err(FatalError::FailedRunOutput {
+                path: output_to_run,
+                err,
+            });
+        }
+        has_run = true;
+    }
+
+    if has_run {
+        Ok(())
+    } else {
+        Err(FatalError::NoSupportedTargets)
+    }
+}
+
+fn build_project(spork_file: ProjectFile, release: bool, all: bool) -> FatalResult<Vec<BuildInfo>> {
+    let mut build_infos = Vec::new();
     if let Some(targets) = spork_file.project.targets {
         if targets.is_empty() {
             warning!("no targets specified - nothing will be built");
@@ -85,35 +126,42 @@ pub fn build(release: bool, all: bool) -> FatalResult<Vec<BuildInfo>> {
     Ok(build_infos)
 }
 
-pub fn build_and_run(release: bool, all: bool) -> FatalResult<()> {
-    let infos = build(release, all)?;
-    let mut has_run = false;
+fn build_workspace(
+    spork_file: WorkspaceFile,
+    release: bool,
+    all: bool,
+) -> FatalResult<Vec<BuildInfo>> {
+    let mut build_infos = Vec::new();
 
-    for info in infos {
-        if info.kind == ProjectType::library {
-            return Err(FatalError::CannotRunLib);
+    for (member_name, url) in spork_file.workspace {
+        check_member_name(&member_name)?;
+        let clone_path = Path::new(&member_name);
+
+        if !clone_path.exists() {
+            mkdir(&member_name)?;
+
+            if let Err(err) = Repository::clone(&url, clone_path) {
+                return Err(FatalError::FailedRunGitClone {
+                    path: clone_path.into(),
+                    url,
+                    err,
+                });
+            };
+        } else {
         }
 
-        let host = Target::host()?;
-        if info.target != host {
-            continue;
-        }
+        let member_spork_file = match parse_spork_file(&format!("{member_name}/{SPORK_FILE_NAME}"))?
+        {
+            BuildFile::Project(proj) => proj,
+            BuildFile::Workspace(_) => return Err(FatalError::NoNestedWorkspaces),
+        };
 
-        let output_to_run = info.output_path.unwrap();
-        if let Err(err) = Command::new(&output_to_run).status() {
-            return Err(FatalError::FailedRunOutput {
-                path: output_to_run,
-                err,
-            });
-        }
-        has_run = true;
+        success!("downloaded '{member_name}'");
+
+        build_infos.append(&mut build_project(member_spork_file, release, all)?);
     }
 
-    if has_run {
-        Ok(())
-    } else {
-        Err(FatalError::NoSupportedTargets)
-    }
+    Ok(build_infos)
 }
 
 fn build_target(info: &mut BuildInfo) -> FatalResult<()> {
@@ -195,7 +243,7 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
     cmd.args(["-c", src_path, "-o", obj_path, "-Isrc"]);
 
     if info.kind == ProjectType::library {
-        cmd.args(["-Iinclude"]);
+        cmd.args(["-Iinclude", "-DSPORK_EXPORT"]);
     }
 
     if info.release {
@@ -222,7 +270,7 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
     cmd.args(objects);
 
     if info.kind == ProjectType::library {
-        cmd.args(["-shared", "-DSPORK_EXPORT"]);
+        cmd.args(["-shared"]);
 
         if info.target.os == OperatingSystem::Windows {
             let import_lib_path = output_path.replace(".dll", ".lib");

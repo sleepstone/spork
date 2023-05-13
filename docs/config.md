@@ -1,4 +1,4 @@
-# Configuration format of Spork.toml
+# Project Configuration
 
 ## `[project]`
 This table details information about your project.
@@ -23,3 +23,23 @@ Valid operating systems are:
 - `freestanding` - No dependencies on any OS - Useful for writing kernels, drivers, etc.
 - `windows` - Windows NT compatible (.exe / .dll)
 - `linux` - Linux compatible
+
+# Workspace Configuration
+
+## `[workspace]`
+This table details all of the members of your workspace.
+A member can be added like this:
+
+```toml
+[workspace]
+example = "remote link to git repository..."
+```
+
+You can add multiple members by adding more keys to `[workspace]`.
+
+```toml
+[workspace]
+foo = "..."
+bar = "..."
+baz = "..."
+```

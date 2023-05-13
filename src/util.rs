@@ -3,6 +3,8 @@ use std::{
     path::Path,
 };
 
+use regex::Regex;
+
 use crate::error::{FatalError, FatalResult};
 
 pub fn mkfile(path: &str, contents: &str) -> FatalResult<()> {
@@ -102,5 +104,23 @@ fn entry_to_string(entry: &DirEntry) -> FatalResult<String> {
         None => Err(FatalError::FileInvalidUTF8 {
             path: entry.path().into(),
         }),
+    }
+}
+
+pub fn check_project_name(name: &str) -> FatalResult<()> {
+    let verifier = Regex::new(r"[^a-z_]").unwrap();
+    if verifier.is_match(name) {
+        Err(FatalError::InvalidProjectName)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn check_member_name(name: &str) -> FatalResult<()> {
+    let verifier = Regex::new(r"[^a-z_]").unwrap();
+    if verifier.is_match(name) {
+        Err(FatalError::InvalidMemberName)
+    } else {
+        Ok(())
     }
 }

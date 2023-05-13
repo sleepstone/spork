@@ -1,11 +1,10 @@
 use git2::Repository;
-use regex::Regex;
 
 use crate::{
     error::{FatalError, FatalResult},
-    project::{BuildFile, ProjectInfo, ProjectType},
+    project::{ProjectFile, ProjectInfo, ProjectType},
     success,
-    util::{mkdir, mkfile},
+    util::{check_project_name, mkdir, mkfile},
     SPORK_FILE_NAME,
 };
 
@@ -45,7 +44,7 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
 }
 
 fn create_spork_file(name: &str, path: &str, project_type: ProjectType) -> FatalResult<()> {
-    let info_template = BuildFile {
+    let info_template = ProjectFile {
         project: ProjectInfo {
             name: name.to_string(),
             kind: project_type,
@@ -59,13 +58,4 @@ fn create_spork_file(name: &str, path: &str, project_type: ProjectType) -> Fatal
     )?;
 
     Ok(())
-}
-
-fn check_project_name(name: &str) -> FatalResult<()> {
-    let verifier = Regex::new(r"[^a-z_]").unwrap();
-    if verifier.is_match(name) {
-        Err(FatalError::InvalidProjectName)
-    } else {
-        Ok(())
-    }
 }

@@ -2,10 +2,18 @@ use std::{fmt::Display, fs};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{FatalError, FatalResult};
+use crate::{
+    error::{FatalError, FatalResult},
+    workspace::{parse_spork_workspace, WorkspaceFile},
+};
+
+pub enum BuildFile {
+    Project(ProjectFile),
+    Workspace(WorkspaceFile),
+}
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BuildFile {
+pub struct ProjectFile {
     pub project: ProjectInfo,
 }
 
@@ -19,13 +27,21 @@ pub struct ProjectInfo {
 pub fn parse_spork_file(path: &str) -> FatalResult<BuildFile> {
     let toml_src = match fs::read_to_string(path) {
         Ok(res) => res,
-        Err(_) => return Err(FatalError::NoSporkProject),
+        Err(_) => return Err(FatalError::NoSporkToml),
     };
 
-    match toml::from_str(&toml_src) {
-        Ok(res) => Ok(res),
-        Err(err) => Err(FatalError::BuildFileParseError { err }),
-    }
+    let project_info = match toml::from_str(&toml_src) {
+        Ok(res) => res,
+        Err(err) => {
+            if let Ok(workspace) = parse_spork_workspace(path) {
+                return Ok(BuildFile::Workspace(workspace));
+            }
+
+            return Err(FatalError::BuildFileParseError { err });
+        }
+    };
+
+    Ok(BuildFile::Project(project_info))
 }
 
 #[allow(non_camel_case_types)]
