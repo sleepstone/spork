@@ -4,12 +4,9 @@ description = "Opinionated C/C++ build system"
 version = "0.1.0"
 edition = "2021"
 
-[profile.release]
-lto = true
-strip = true
-
 [dependencies]
 git2 = "0.17.1"
+rand = "0.8.5"
 regex = "1.8.1"
 toml = "0.7.3"
 yansi = "0.5.1"

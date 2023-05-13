@@ -40,7 +40,7 @@ pub fn new_project(name: &str, path: &str, project_type: ProjectType) -> FatalRe
     let clang_format_src = include_str!("../template/.clang-format");
     mkfile(&format!("{path}/.clang-format"), clang_format_src)?;
 
-    mkfile(&format!("{path}/.gitignore"), "bin\n")?;
+    mkfile(&format!("{path}/.gitignore"), ".vscode\nbin\n")?;
 
     if project_type == ProjectType::Library {
         mkdir(&format!("{path}/include"))?;

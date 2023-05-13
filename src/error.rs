@@ -1,7 +1,5 @@
 use std::{fmt::Display, io, path::Path};
 
-use yansi::Paint;
-
 use crate::SPORK_FILE_NAME;
 
 pub type FatalResult<T> = Result<T, FatalError>;
@@ -18,14 +16,12 @@ pub enum FatalError {
     CurrentDirInvalidUTF8,
     FileInvalidUTF8 { path: Box<Path> },
     FailedRunGitInit { err: git2::Error },
+    FailedRunZigcc { err: io::Error },
+    FailedRunOutput { path: String, err: io::Error },
     BuildFileParseError { err: toml::de::Error },
+    CompilationFailed,
+    LinkFailed,
     NoSporkProject,
-}
-
-impl FatalError {
-    pub fn print(&self) {
-        println!("{} {}", Paint::red("[!]").bold(), self);
-    }
 }
 
 impl Display for FatalError {
@@ -65,10 +61,16 @@ impl Display for FatalError {
             Self::FailedRunGitInit { err } => {
                 write!(f, "failed to initialize a git repository: {err}")
             }
+            Self::FailedRunZigcc { err } => {
+                write!(f, "failed to run 'zig cc': {err}")
+            }
+            Self::FailedRunOutput { path, err } => write!(f, "failed to run '{path}': {err}"),
             Self::BuildFileParseError { err } => {
                 writeln!(f, "failed to parse '{SPORK_FILE_NAME}':")?;
                 write!(f, "{err}")
             }
+            Self::CompilationFailed => write!(f, "compilation failed"),
+            Self::LinkFailed => write!(f, "linking failed"),
             Self::NoSporkProject => write!(
                 f,
                 "couldn't find a spork project here - use 'spork new' or 'spork init' to create one"

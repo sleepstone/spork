@@ -34,6 +34,13 @@ macro_rules! warning {
     }};
 }
 
+#[macro_export]
+macro_rules! fatal_error {
+    ($($arg:tt)+) => {{
+        println!("{} {}", yansi::Paint::red("[!]").bold(), format!($($arg)+))
+    }};
+}
+
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -71,13 +78,16 @@ enum Commands {
     /// Build the current project
     Build,
 
+    /// Build and run the current project
+    Run,
+
     /// Removes the 'bin' directory
     Clean,
 }
 
 fn main() {
     if let Err(err) = init() {
-        err.print();
+        fatal_error!("{err}");
         exit(1);
     }
 }
@@ -90,6 +100,7 @@ fn init() -> FatalResult<()> {
         Commands::Init { lib, force } => init_project(lib, force),
 
         Commands::Build => build_project(),
+        Commands::Run => run_project(),
         Commands::Clean => clean_project(),
     }
 }
@@ -160,7 +171,15 @@ fn init_project(lib: bool, force: bool) -> FatalResult<()> {
 }
 
 fn build_project() -> FatalResult<()> {
-    build::build("bin")
+    build::build("bin")?;
+
+    Ok(())
+}
+
+fn run_project() -> FatalResult<()> {
+    build::build_and_run("bin")?;
+
+    Ok(())
 }
 
 fn clean_project() -> FatalResult<()> {
