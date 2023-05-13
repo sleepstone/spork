@@ -1,4 +1,4 @@
-# Configuration format of Spark.toml
+# Configuration format of Spork.toml
 
 ## `[project]`
 This table details information about your project.
