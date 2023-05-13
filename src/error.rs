@@ -89,7 +89,7 @@ impl Display for FatalError {
             Self::NoSourceFiles => write!(f, "project has no source files"),
             Self::NoSupportedTargets => write!(
                 f,
-                "unable to run - no defined targets match host target of '{}'",
+                "unable to run - built target does not match host target of '{}'",
                 Target::host().unwrap()
             ),
             Self::BadTarget { target } => {

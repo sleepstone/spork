@@ -80,6 +80,10 @@ enum Commands {
         /// Build in release mode instead of debug
         #[arg(short, long)]
         release: bool,
+
+        /// Build for all targets
+        #[arg(short, long)]
+        all: bool,
     },
 
     /// Build and run the current project
@@ -87,6 +91,10 @@ enum Commands {
         /// Build in release mode instead of debug
         #[arg(short, long)]
         release: bool,
+
+        /// Build for all targets
+        #[arg(short, long)]
+        all: bool,
     },
 
     /// Removes the 'bin' directory
@@ -107,8 +115,8 @@ fn init() -> FatalResult<()> {
         Commands::New { name, lib, force } => new_project(&name, lib, force),
         Commands::Init { lib, force } => init_project(lib, force),
 
-        Commands::Build { release } => build_project(release),
-        Commands::Run { release } => run_project(release),
+        Commands::Build { release, all } => build_project(release, all),
+        Commands::Run { release, all } => run_project(release, all),
         Commands::Clean => clean_project(),
     }
 }
@@ -178,13 +186,13 @@ fn init_project(lib: bool, force: bool) -> FatalResult<()> {
     Ok(())
 }
 
-fn build_project(release: bool) -> FatalResult<()> {
-    build::build(release)?;
+fn build_project(release: bool, all: bool) -> FatalResult<()> {
+    build::build(release, all)?;
     Ok(())
 }
 
-fn run_project(release: bool) -> FatalResult<()> {
-    build::build_and_run(release)?;
+fn run_project(release: bool, all: bool) -> FatalResult<()> {
+    build::build_and_run(release, all)?;
     Ok(())
 }
 

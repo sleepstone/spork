@@ -34,21 +34,35 @@ impl Display for BuildInfo {
     }
 }
 
-pub fn build(release: bool) -> FatalResult<Vec<BuildInfo>> {
+pub fn build(release: bool, all: bool) -> FatalResult<Vec<BuildInfo>> {
     let spork_file = parse_spork_file(SPORK_FILE_NAME)?;
     let mut build_infos = Vec::new();
 
     if let Some(targets) = spork_file.project.targets {
         if targets.is_empty() {
             warning!("no targets specified - nothing will be built");
+            return Ok(build_infos);
         }
 
-        for target in targets {
+        if all {
+            for target in targets {
+                let mut info = BuildInfo {
+                    name: spork_file.project.name.clone(),
+                    release,
+                    kind: spork_file.project.kind,
+                    target: Target::new(&target, false)?,
+                    output_path: None,
+                };
+
+                build_target(&mut info)?;
+                build_infos.push(info);
+            }
+        } else {
             let mut info = BuildInfo {
                 name: spork_file.project.name.clone(),
                 release,
                 kind: spork_file.project.kind,
-                target: Target::new(&target, false)?,
+                target: Target::new(&targets[0], false)?,
                 output_path: None,
             };
 
@@ -71,8 +85,8 @@ pub fn build(release: bool) -> FatalResult<Vec<BuildInfo>> {
     Ok(build_infos)
 }
 
-pub fn build_and_run(release: bool) -> FatalResult<()> {
-    let infos = build(release)?;
+pub fn build_and_run(release: bool, all: bool) -> FatalResult<()> {
+    let infos = build(release, all)?;
     let mut has_run = false;
 
     for info in infos {

@@ -40,4 +40,26 @@ name = "example"
 kind = "executable"
 ```
 
-**TODO: add more tutorial**
+However you can add more options to it as you need them.
+
+For example, Spork can cross compile for multiple targets:
+
+```toml
+[project]
+name = "example"
+kind = "executable"
+targets = [
+  "x86_64-windows",
+  "x86-linux",
+  "x86-windows",
+]
+```
+
+Spork uses a [target triple](https://wiki.osdev.org/Target_Triplet) to specify the output target. It details the architecture of the CPU and the OS that your program will run on top of. A list of all supported targets can be found in [config.md](config.md#target).
+
+Without the `targets` field, Spork will compile for your host platform. Otherwise, it will compile for the first target in the list.
+
+If you want to compile for all targets, use:
+```sh
+spork build --all
+```
