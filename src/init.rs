@@ -49,6 +49,7 @@ fn create_spork_file(name: &str, path: &str, project_type: ProjectType) -> Fatal
             name: name.to_string(),
             kind: project_type,
             targets: None,
+            dependencies: None,
         },
     };
 

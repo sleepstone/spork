@@ -1,18 +1,21 @@
-use std::{fmt::Display, path::Path, process::Command, time::Instant};
+use std::{
+    collections::{hash_map::IntoIter, HashMap},
+    env,
+    fmt::Display,
+    process::Command,
+    time::Instant,
+};
 
-use git2::Repository;
 use regex::Regex;
 
 use crate::{
     error::{FatalError, FatalResult},
     progress,
-    project::{parse_spork_file, BuildFile, ProjectFile, ProjectType},
+    project::{parse_spork_file, ProjectFile, ProjectType},
     success,
     targets::{OperatingSystem, Target},
-    util::{check_member_name, mkdir, mkdir_all, walkdir},
-    warning,
-    workspace::WorkspaceFile,
-    SPORK_FILE_NAME,
+    util::{mkdir_all, walkdir, LAUNCH_DIR},
+    warning, SPORK_FILE_NAME,
 };
 
 pub struct BuildInfo {
@@ -21,6 +24,7 @@ pub struct BuildInfo {
     pub kind: ProjectType,
     pub target: Target,
     pub output_path: Option<String>,
+    pub dependencies: Option<Dependencies>,
 }
 
 impl Display for BuildInfo {
@@ -39,11 +43,7 @@ impl Display for BuildInfo {
 
 pub fn build(release: bool, all: bool) -> FatalResult<Vec<BuildInfo>> {
     let spork_file = parse_spork_file(SPORK_FILE_NAME)?;
-
-    match spork_file {
-        BuildFile::Project(proj) => build_project(proj, release, all),
-        BuildFile::Workspace(ws) => build_workspace(ws, release, all),
-    }
+    build_project(spork_file, release, all)
 }
 
 pub fn build_and_run(release: bool, all: bool) -> FatalResult<()> {
@@ -87,36 +87,57 @@ fn build_project(spork_file: ProjectFile, release: bool, all: bool) -> FatalResu
 
         if all {
             for target in targets {
+                let target = Target::new(&target, false)?;
+                let dependencies = match &spork_file.project.dependencies {
+                    Some(deps) => Some(Dependencies::new(deps.clone(), &target)?),
+                    None => None,
+                };
+
                 let mut info = BuildInfo {
                     name: spork_file.project.name.clone(),
                     release,
                     kind: spork_file.project.kind,
-                    target: Target::new(&target, false)?,
+                    target,
                     output_path: None,
+                    dependencies,
                 };
 
                 build_target(&mut info)?;
                 build_infos.push(info);
             }
         } else {
+            let target = Target::new(&targets[0], false)?;
+            let dependencies = match spork_file.project.dependencies {
+                Some(deps) => Some(Dependencies::new(deps, &target)?),
+                None => None,
+            };
+
             let mut info = BuildInfo {
                 name: spork_file.project.name.clone(),
                 release,
                 kind: spork_file.project.kind,
-                target: Target::new(&targets[0], false)?,
+                target,
                 output_path: None,
+                dependencies,
             };
 
             build_target(&mut info)?;
             build_infos.push(info);
         }
     } else {
+        let target = Target::host()?;
+        let dependencies = match spork_file.project.dependencies {
+            Some(deps) => Some(Dependencies::new(deps, &target)?),
+            None => None,
+        };
+
         let mut info = BuildInfo {
             name: spork_file.project.name,
             release,
             kind: spork_file.project.kind,
-            target: Target::host()?,
+            target,
             output_path: None,
+            dependencies,
         };
 
         build_target(&mut info)?;
@@ -126,45 +147,36 @@ fn build_project(spork_file: ProjectFile, release: bool, all: bool) -> FatalResu
     Ok(build_infos)
 }
 
-fn build_workspace(
-    spork_file: WorkspaceFile,
-    release: bool,
-    all: bool,
-) -> FatalResult<Vec<BuildInfo>> {
-    let mut build_infos = Vec::new();
+fn build_target(info: &mut BuildInfo) -> FatalResult<()> {
+    let current_dir = match env::current_dir() {
+        Ok(res) => res.to_string_lossy().to_string(),
+        Err(err) => return Err(FatalError::CouldntGetWorkDir { err }),
+    };
 
-    for (member_name, url) in spork_file.workspace {
-        check_member_name(&member_name)?;
-        let clone_path = Path::new(&member_name);
+    if let Some(deps) = info.dependencies.clone() {
+        for (dep_path, dep) in deps {
+            if let Err(err) = env::set_current_dir(&dep_path) {
+                return Err(FatalError::CouldntChangeWorkDir { dir: dep_path, err });
+            }
 
-        if !clone_path.exists() {
-            mkdir(&member_name)?;
+            build_target(&mut BuildInfo {
+                name: dep.name,
+                release: info.release,
+                kind: ProjectType::library,
+                target: info.target.clone(),
+                output_path: info.output_path.clone(),
+                dependencies: dep.deps,
+            })?;
 
-            if let Err(err) = Repository::clone(&url, clone_path) {
-                return Err(FatalError::FailedRunGitClone {
-                    path: clone_path.into(),
-                    url,
+            if let Err(err) = env::set_current_dir(&current_dir) {
+                return Err(FatalError::CouldntChangeWorkDir {
+                    dir: current_dir,
                     err,
                 });
-            };
-        } else {
+            }
         }
-
-        let member_spork_file = match parse_spork_file(&format!("{member_name}/{SPORK_FILE_NAME}"))?
-        {
-            BuildFile::Project(proj) => proj,
-            BuildFile::Workspace(_) => return Err(FatalError::NoNestedWorkspaces),
-        };
-
-        success!("downloaded '{member_name}'");
-
-        build_infos.append(&mut build_project(member_spork_file, release, all)?);
     }
 
-    Ok(build_infos)
-}
-
-fn build_target(info: &mut BuildInfo) -> FatalResult<()> {
     let start_time = Instant::now();
 
     let obj_name_regex = Regex::new(r"[/\\]").unwrap();
@@ -245,6 +257,10 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
 
     if info.kind == ProjectType::library {
         cmd.args(["-Iinclude", "-DSPORK_EXPORT"]);
+    } else if let Some(deps) = info.dependencies.clone() {
+        for (_, dep) in deps {
+            cmd.arg(format!("-I../{}/include", dep.name));
+        }
     }
 
     if info.release {
@@ -252,6 +268,8 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
     } else {
         cmd.args(["-O0", "-g", "-DSPORK_DEBUG"]);
     }
+
+    dbg!(&cmd);
 
     let cmd_output = match cmd.status() {
         Ok(res) => res,
@@ -267,7 +285,7 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
 
 fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> FatalResult<bool> {
     let mut cmd = common_build_cmd(info);
-    cmd.args(["-o", output_path]);
+    cmd.args(["-o", output_path, &format!("-L{}", out_dir(info))]);
     cmd.args(objects);
 
     if info.kind == ProjectType::library {
@@ -277,6 +295,10 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
             let import_lib_path = output_path.replace(".dll", ".lib");
             cmd.arg(&format!("-Wl,--out-implib,{}", import_lib_path));
         }
+    } else if let Some(deps) = info.dependencies.clone() {
+        for (_, dep) in deps {
+            cmd.arg(format!("-l{}", dep.name));
+        }
     }
 
     if info.release {
@@ -284,6 +306,8 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
     } else {
         cmd.args(["-O0", "-g"]);
     }
+
+    dbg!(&cmd);
 
     let cmd_output = match cmd.status() {
         Ok(res) => res,
@@ -307,11 +331,70 @@ fn common_build_cmd(info: &BuildInfo) -> Command {
 }
 
 fn out_dir(info: &BuildInfo) -> String {
-    let prefix = format!("bin/{}", info.target);
+    let prefix = unsafe { format!("{LAUNCH_DIR}/bin/{}", info.target) };
 
     if info.release {
         format!("{prefix}/release")
     } else {
         format!("{prefix}/debug")
+    }
+}
+
+#[derive(Clone)]
+pub struct Dependency {
+    name: String,
+    deps: Option<Dependencies>,
+}
+
+#[derive(Clone)]
+pub struct Dependencies {
+    path_to_deps: HashMap<String, Dependency>,
+}
+
+impl Dependencies {
+    pub fn new(paths: Vec<String>, target: &Target) -> FatalResult<Self> {
+        let mut path_to_deps = HashMap::new();
+
+        for path in paths {
+            let spork_file = parse_spork_file(&format!("{path}/{SPORK_FILE_NAME}"))?;
+
+            if spork_file.project.kind != ProjectType::library {
+                return Err(FatalError::NoExecutableDependencies {
+                    name: spork_file.project.name,
+                });
+            }
+
+            if let Some(targets) = spork_file.project.targets {
+                if !targets.contains(&target.to_string()) {
+                    return Err(FatalError::NoTargetSupportDependency {
+                        dep: spork_file.project.name,
+                        target: target.clone(),
+                    });
+                }
+            }
+
+            path_to_deps.insert(
+                path,
+                Dependency {
+                    name: spork_file.project.name,
+                    deps: match spork_file.project.dependencies {
+                        Some(deps) => Some(Dependencies::new(deps, target)?),
+                        None => None,
+                    },
+                },
+            );
+        }
+
+        Ok(Self { path_to_deps })
+    }
+}
+
+impl IntoIterator for Dependencies {
+    type Item = (String, Dependency);
+
+    type IntoIter = IntoIter<String, Dependency>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.path_to_deps.into_iter()
     }
 }

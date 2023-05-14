@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::{self, DirEntry},
     path::Path,
 };
@@ -116,11 +117,8 @@ pub fn check_project_name(name: &str) -> FatalResult<()> {
     }
 }
 
-pub fn check_member_name(name: &str) -> FatalResult<()> {
-    let verifier = Regex::new(r"[^a-z_]").unwrap();
-    if verifier.is_match(name) {
-        Err(FatalError::InvalidMemberName)
-    } else {
-        Ok(())
-    }
+pub static mut LAUNCH_DIR: String = String::new();
+
+pub fn update_launch_dir() {
+    unsafe { LAUNCH_DIR = env::current_dir().unwrap().to_string_lossy().to_string() }
 }

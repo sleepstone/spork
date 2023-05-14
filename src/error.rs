@@ -7,69 +7,32 @@ pub type FatalResult<T> = Result<T, FatalError>;
 #[derive(Debug)]
 pub enum FatalError {
     InvalidProjectName,
-    InvalidMemberName,
-    CannotCreateFile {
-        path: String,
-        err: io::Error,
-    },
-    CannotCreateDir {
-        path: String,
-        err: io::Error,
-    },
-    CannotGetCurrentDir {
-        err: io::Error,
-    },
-    CannotReadFileInDir {
-        path: String,
-        err: io::Error,
-    },
-    CannotReadDir {
-        path: String,
-        err: io::Error,
-    },
-    CannotRemoveDir {
-        path: String,
-        err: io::Error,
-    },
+    CannotCreateFile { path: String, err: io::Error },
+    CannotCreateDir { path: String, err: io::Error },
+    CannotGetCurrentDir { err: io::Error },
+    CannotReadFileInDir { path: String, err: io::Error },
+    CannotReadDir { path: String, err: io::Error },
+    CannotRemoveDir { path: String, err: io::Error },
     CurrentDirInvalid,
     CurrentDirInvalidUTF8,
-    FileInvalidUTF8 {
-        path: Box<Path>,
-    },
-    FailedRunGitInit {
-        err: git2::Error,
-    },
-    FailedRunGitClone {
-        path: Box<Path>,
-        url: String,
-        err: git2::Error,
-    },
-    FailedRunZigcc {
-        err: io::Error,
-    },
-    FailedRunOutput {
-        path: String,
-        err: io::Error,
-    },
-    BuildFileParseError {
-        err: toml::de::Error,
-    },
+    FileInvalidUTF8 { path: Box<Path> },
+    FailedRunGitInit { err: git2::Error },
+    FailedRunZigcc { err: io::Error },
+    FailedRunOutput { path: String, err: io::Error },
+    BuildFileParseError { err: toml::de::Error },
     CompilationFailed,
     LinkFailed,
     CannotRunLib,
-    NoSporkToml,
+    NoSporkToml { path: String },
     NoSourceFiles,
     NoSupportedTargets,
-    BadTarget {
-        target: String,
-    },
-    InvalidTargetArch {
-        arch: String,
-    },
-    InvalidTargetOS {
-        os: String,
-    },
-    NoNestedWorkspaces,
+    BadTarget { target: String },
+    InvalidTargetArch { arch: String },
+    InvalidTargetOS { os: String },
+    NoExecutableDependencies { name: String },
+    NoTargetSupportDependency { dep: String, target: Target },
+    CouldntGetWorkDir { err: io::Error },
+    CouldntChangeWorkDir { dir: String, err: io::Error },
 }
 
 impl Display for FatalError {
@@ -78,10 +41,6 @@ impl Display for FatalError {
             Self::InvalidProjectName => write!(
                 f,
                 "project names can only contain lowercase ASCII letters and underscores"
-            ),
-            Self::InvalidMemberName => write!(
-                f,
-                "member names can only contain lowercase ASCII letters and underscores"
             ),
             Self::CannotCreateFile { path, err } => {
                 write!(f, "cannot create file '{path}': {err}")
@@ -113,13 +72,6 @@ impl Display for FatalError {
             Self::FailedRunGitInit { err } => {
                 write!(f, "failed to initialize a git repository: {err}")
             }
-            Self::FailedRunGitClone { path, url, err } => {
-                write!(
-                    f,
-                    "failed to clone git repository '{url}' into '{}': {err}",
-                    path.display()
-                )
-            }
             Self::FailedRunZigcc { err } => {
                 write!(f, "failed to run 'zig cc': {err}")
             }
@@ -134,7 +86,7 @@ impl Display for FatalError {
                 f,
                 "only executable projects can be run (use 'spork build' instead)"
             ),
-            Self::NoSporkToml => write!(f, "couldn't find a '{SPORK_FILE_NAME}' file here"),
+            Self::NoSporkToml { path } => write!(f, "couldn't find a '{SPORK_FILE_NAME}' file at '{path}'"),
             Self::NoSourceFiles => write!(f, "project has no source files"),
             Self::NoSupportedTargets => write!(
                 f,
@@ -148,7 +100,13 @@ impl Display for FatalError {
                 write!(f, "target architecture '{arch}' is invalid")
             }
             Self::InvalidTargetOS { os } => write!(f, "target os '{os}' is invalid"),
-            Self::NoNestedWorkspaces => write!(f, "spork does not support nested workspaces"),
+            Self::NoExecutableDependencies { name } => write!(
+                f,
+                "dependencies may only be library projects - '{name}' points to an executable project"
+            ),
+            Self::NoTargetSupportDependency { dep, target } => write!(f, "dependency '{dep}' does not support target '{target}'"),
+            Self::CouldntGetWorkDir { err } => write!(f, "couldn't get working directory: {err}"),
+            Self::CouldntChangeWorkDir { dir, err } => write!(f, "couldn't change working directory to '{dir}': {err}"),
         }
     }
 }

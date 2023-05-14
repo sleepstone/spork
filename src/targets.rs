@@ -10,7 +10,7 @@ pub struct Target {
 
 impl Target {
     pub fn new(target: &str, lenient: bool) -> FatalResult<Self> {
-        let mut triple_comps: Vec<_> = target.split("-").collect();
+        let mut triple_comps: Vec<_> = target.split('-').collect();
 
         if !lenient {
             if triple_comps.len() != 2 {
@@ -43,13 +43,11 @@ impl Target {
     }
 
     pub fn cc_args(&self) -> Vec<String> {
-        let mut args = Vec::new();
-
-        args.push(String::from(match self.os {
+        let args = vec![String::from(match self.os {
             OperatingSystem::Freestanding => "-DSPORK_OS_FREESTANDING",
             OperatingSystem::Windows => "-DSPORK_OS_WINDOWS",
             OperatingSystem::Linux => "-DSPORK_OS_LINUX",
-        }));
+        })];
 
         args
     }

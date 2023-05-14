@@ -4,13 +4,13 @@ mod init;
 mod project;
 mod targets;
 mod util;
-mod workspace;
 
 use std::{env::current_dir, fs, process::exit};
 
 use clap::{Parser, Subcommand};
 use error::{FatalError, FatalResult};
 use project::{parse_spork_file, ProjectType};
+use util::update_launch_dir;
 
 const SPORK_FILE_NAME: &str = "Spork.toml";
 
@@ -103,6 +103,7 @@ enum Commands {
 }
 
 fn main() {
+    update_launch_dir();
     if let Err(err) = init() {
         fatal_error!("{err}");
         exit(1);

@@ -24,22 +24,7 @@ Valid operating systems are:
 - `windows` - Windows NT compatible (.exe / .dll)
 - `linux` - Linux compatible
 
-# Workspace Configuration
-
-## `[workspace]`
-This table details all of the members of your workspace.
-A member can be added like this:
-
-```toml
-[workspace]
-example = "remote link to git repository..."
-```
-
-You can add multiple members by adding more keys to `[workspace]`.
-
-```toml
-[workspace]
-foo = "..."
-bar = "..."
-baz = "..."
-```
+### `dependencies`
+Optional.
+A list of paths to **external Spork projects**. Spork will build these projects before yours, and they will
+link against them. Note that currently only library dependencies are supported.
