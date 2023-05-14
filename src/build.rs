@@ -269,8 +269,6 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
         cmd.args(["-O0", "-g", "-DSPORK_DEBUG"]);
     }
 
-    dbg!(&cmd);
-
     let cmd_output = match cmd.status() {
         Ok(res) => res,
         Err(err) => return Err(FatalError::FailedRunZigcc { err }),
@@ -285,7 +283,7 @@ fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bo
 
 fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> FatalResult<bool> {
     let mut cmd = common_build_cmd(info);
-    cmd.args(["-o", output_path, &format!("-L{}", out_dir(info))]);
+    cmd.args([&format!("-L{}", out_dir(info))]);
     cmd.args(objects);
 
     if info.kind == ProjectType::library {
@@ -294,11 +292,25 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
         if info.target.os == OperatingSystem::Windows {
             let import_lib_path = output_path.replace(".dll", ".lib");
             cmd.arg(&format!("-Wl,--out-implib,{}", import_lib_path));
+            cmd.args(["-o", output_path]);
+        } else {
+            cmd.args([
+                "-o",
+                &output_path.replace(&info.name, &format!("lib{}", info.name)),
+            ]);
         }
-    } else if let Some(deps) = info.dependencies.clone() {
-        for (_, dep) in deps {
-            cmd.arg(format!("-l{}", dep.name));
+    } else {
+        if let Some(deps) = info.dependencies.clone() {
+            if info.target.os != OperatingSystem::Windows {
+                cmd.arg(&format!("-Wl,-rpath,{}", out_dir(info)));
+            }
+
+            for (_, dep) in deps {
+                cmd.arg(format!("-l{}", dep.name));
+            }
         }
+
+        cmd.args(["-o", output_path]);
     }
 
     if info.release {
@@ -306,8 +318,6 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
     } else {
         cmd.args(["-O0", "-g"]);
     }
-
-    dbg!(&cmd);
 
     let cmd_output = match cmd.status() {
         Ok(res) => res,
