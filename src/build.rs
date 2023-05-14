@@ -241,6 +241,7 @@ fn build_target(info: &mut BuildInfo) -> FatalResult<()> {
 fn build_obj(src_path: &str, obj_path: &str, info: &BuildInfo) -> FatalResult<bool> {
     let mut cmd = common_build_cmd(info);
     cmd.args(["-c", src_path, "-o", obj_path, "-Isrc"]);
+    cmd.args(info.target.cc_args());
 
     if info.kind == ProjectType::library {
         cmd.args(["-Iinclude", "-DSPORK_EXPORT"]);

@@ -41,6 +41,18 @@ impl Target {
     pub fn ziggified(&self) -> String {
         format!("{}-{}", self.arch, self.os.ziggified())
     }
+
+    pub fn cc_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        args.push(String::from(match self.os {
+            OperatingSystem::Freestanding => "-DSPORK_OS_FREESTANDING",
+            OperatingSystem::Windows => "-DSPORK_OS_WINDOWS",
+            OperatingSystem::Linux => "-DSPORK_OS_LINUX",
+        }));
+
+        args
+    }
 }
 
 impl Display for Target {
