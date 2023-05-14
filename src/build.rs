@@ -302,7 +302,7 @@ fn build_output(objects: Vec<String>, output_path: &str, info: &BuildInfo) -> Fa
     } else {
         if let Some(deps) = info.dependencies.clone() {
             if info.target.os != OperatingSystem::Windows {
-                cmd.arg(&format!("-Wl,-rpath,{}", out_dir(info)));
+                cmd.arg(format!("-Wl,-rpath,{}", "."));
             }
 
             for (_, dep) in deps {
